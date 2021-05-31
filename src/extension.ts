@@ -7,6 +7,8 @@ import FileItem from './fileItem';
 import * as fs from 'fs';
 import * as path from 'path';
 
+let win = vscode.window;
+
 export interface ExtensionInternal {
     DiredProvider: DiredProvider,
 }
@@ -27,42 +29,45 @@ export function activate(context: vscode.ExtensionContext): ExtensionInternal {
     const providerRegistrations = vscode.Disposable.from(
         vscode.workspace.registerTextDocumentContentProvider(DiredProvider.scheme, provider),
     );
-    const commandOpen = vscode.commands.registerCommand("extension.dired.open", () => {
-        let dir = vscode.workspace.rootPath;
-        const at = vscode.window.activeTextEditor;
-        if (at) {
-            if (at.document.uri.scheme === DiredProvider.scheme) {
-                dir = provider.dirname;
-            } else {
-                const doc = at.document;
-                dir = path.dirname(doc.fileName);
+
+//    export function showQuickPick<T extends QuickPickItem>(items: readonly T[] | Thenable<readonly T[]>, options: //// QuickPickOptions & { canPickMany: true; }, token?: CancellationToken): Thenable<T[] | undefined>;
+
+
+    const commandOpen = vscode.commands.registerCommand("extension.dired.open", async () => {
+        const curFileName = win.activeTextEditor?.document.fileName;
+        const quickPick =  vscode.window.createQuickPick( );
+        const homedir = require('os').homedir();
+        let items = new Array();
+        items.push( { label: homedir, description: 'home folder'} );
+        items.push( { label: curFileName, description: 'current documentfolder' });
+        let wspFolders = vscode.workspace.workspaceFolders;
+        if (wspFolders) {
+            for (let wsp of wspFolders) {
+                items.push({label:  wsp.uri.path, description: 'workespacefolder' });
             }
         }
-        if (!dir) {
-            dir = require('os').homedir();
-        }
-        if (dir) {
-            if (!ask_dir) {
-                provider.openDir(dir);
-            } else {
-                vscode.window.showInputBox({ value: dir, valueSelection: [dir.length, dir.length] })
-                    .then((path) => {
-                        if (!path) {
-                            return;
-                        }
-                        if (fs.lstatSync(path).isDirectory()) {
-                            provider.openDir(path);
-                        } else if (fs.lstatSync(path).isFile()) {
-                            const f = new FileItem(path, "", false, true); // Incomplete FileItem just to get URI.
-                            const uri = f.uri;
-                            if (uri) {
-                                provider.showFile(uri);
-                            }
-                        }
-                    });
-            }
-        }
+        const result = await win.showQuickPick(items, {
+            placeHolder: 'pick a workspace or folder',
+        });
+        showDir(result.label);
     });
+
+    function showDir(path: string) {
+        if (!path) {
+            return;
+        }
+        if (fs.lstatSync(path).isDirectory()) {
+            provider.openDir(path);
+        } else if (fs.lstatSync(path).isFile()) {
+            const f = new FileItem(path, "", false, true); // Incomplete FileItem just to get URI.
+            const uri = f.uri;
+            if (uri) {
+                provider.showFile(uri);
+            }
+        }
+
+    }
+
     const commandEnter = vscode.commands.registerCommand("extension.dired.enter", () => {
         provider.enter();
     });
@@ -136,4 +141,4 @@ export function activate(context: vscode.ExtensionContext): ExtensionInternal {
     return {
         DiredProvider: provider,
     };
-}
+};
